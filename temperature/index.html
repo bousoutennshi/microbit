@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+
+    <title>microbit-temperature</title>
+    <meta name="description" content="Read temperature data on BBC micro:bit boards with Web Bluetooth API.">
+    <meta name="keywords" content="microbit,web bluetooth api>
+    <meta name="theme-color" content="#007bff">
+    <meta property="og:title" content="microbit-temperature">
+    <meta property="og:type" content="website">
+    <meta property="og:description" content="Read temperature data on BBC micro:bit boards with Web Bluetooth API.">
+    <meta property="og:site_name" content="microbit-temperature">
+    <meta property="og:locale" content="ja_JP">
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary justify-content-between">
+        <a class="navbar-brand" href="https://github.com/bousoutennshi/microbit">microbit</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse justify-content-end" id="navbarSupportedContent">
+            <ul class="navbar-nav">
+                <li class="nav-item active" onClick="onClickStartButton()">
+                    <a class="nav-link" href="#">Start</a>
+                </li>
+                <li class="nav-item active" onClick="onClickStopButton()">
+                    <a class="nav-link" href="#">Stop</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="container">
+            <div class="row justify-content-center">
+                <h1 class="display-1" name="Temperature"></h1>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="myModalLabel">Error</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" name="modal-message"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+
+    <script type="text/javascript">
+// 接続するBluetoothデバイス
+let targetDevice = null;
+
+// 最初に受信した温度
+let initialTemperature = 999;
+
+// micro:bit 温度サービス
+const TEMPERATURE_SERVICE = "e95d6100-251d-470a-a062-fa1922dfa9a8";
+
+// micro:bit 温度データキャラクタリスティック
+const TEMPERATURE_DATA = "e95d9250-251d-470a-a062-fa1922dfa9a8";
+
+// micro:bit 温度取得間隔キャラクタリスティック
+const TEMPERATURE_PERIOD = "e95d1b25-251d-470a-a062-fa1922dfa9a8";
+
+function onClickStartButton() {
+  if (!navigator.bluetooth) {
+    alert("Web Bluetooth is not supported.")
+    return;
+  }
+
+  requestDevice();
+}
+
+function onClickStopButton() {
+  if (!navigator.bluetooth) {
+    alert("Web Bluetooth is not supported.")
+    return;
+  }
+
+  initialTemperature = 999;
+  document.getElementsByClassName("background")[0].style.backgroundColor = "#ffffff";
+  disconnect();
+}
+
+function requestDevice() {
+  navigator.bluetooth.requestDevice({
+    filters: [
+      { services: [TEMPERATURE_SERVICE] },
+      { namePrefix: "BBC micro:bit" }
+    ]
+  })
+    .then(device => {
+      targetDevice = device;
+      connect(targetDevice);
+    })
+    .catch(error => {
+      alert(error);
+      targetDevice = null;
+    });
+}
+
+function disconnect() {
+  if (targetDevice == null) {
+    alert('target device is null.');
+    return;
+  }
+
+  targetDevice.gatt.disconnect();
+}
+
+function connect(device) {
+  device.gatt.connect()
+    .then(server => {
+      findTemperatureService(server);
+    })
+    .catch(error => {
+      alert(error);
+    });
+}
+
+// 温度を表示する
+function updateTemperatureValue(temperature) {
+  document.getElementsByName("Temperature")[0].innerHTML = temperature + "℃";
+
+  if (initialTemperature == 999) {
+    initialTemperature = temperature;
+  }
+
+  let diff = Math.abs(initialTemperature - temperature);
+
+  if (diff > 5) {
+    diff = 5;
+  }
+
+  let strR = "ff";
+  let strG = "ff";
+  let strB = "ff";
+
+  if (initialTemperature - temperature < 0) {
+    strG = (255 - diff * 16).toString(16);
+    strB = (255 - diff * 16).toString(16);
+  } else if (initialTemperature - temperature > 0) {
+    strR = (255 - diff * 16).toString(16);
+    strG = (255 - diff * 16).toString(16);
+  }
+
+  document.body.style.backgroundColor = "#" + strR + strG + strB;
+}
+
+function findTemperatureService(server) {
+  server.getPrimaryService(TEMPERATURE_SERVICE)
+    .then(service => {
+      findTemperaturePeriodCharacteristic(service);
+      findTemperatureCharacteristic(service);
+    })
+    .catch(error => {
+      alert(error);
+    });
+}
+
+function findTemperaturePeriodCharacteristic(service) {
+  service.getCharacteristic(TEMPERATURE_PERIOD)
+    .then(characteristic => {
+      writeTemperaturePeriodValue(characteristic);
+    })
+    .catch(error => {
+      alert(error);
+    });
+}
+
+function writeTemperaturePeriodValue(characteristic) {
+  characteristic.writeValue(new Uint16Array([160]))
+    .catch(error => {
+      alert(error);
+    });
+}
+
+function findTemperatureCharacteristic(service) {
+  service.getCharacteristic(TEMPERATURE_DATA)
+    .then(characteristic => {
+      startTemperatureNotification(characteristic);
+    })
+    .catch(error => {
+      alert(error);
+    });
+}
+
+function startTemperatureNotification(characteristic) {
+  characteristic.startNotifications()
+    .then(char => {
+      characteristic.addEventListener('characteristicvaluechanged',
+        onTemperatureChanged);
+    });
+}
+
+function onTemperatureChanged(event) {
+  let bearing = event.target.value.getInt8(0, true);
+  updateTemperatureValue(bearing);
+}
+    </script>
+</body>
+
+</html>
